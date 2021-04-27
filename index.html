@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+    <head>
+
+    </head>
+    
+    <body>
+        <script src="https://unpkg.com/tone"></script>
+        <script src="https://cdn.jsdelivr.net/npm/p5@1.3.1/lib/p5.js"></script>
+        <script type="text/javascript">
+            //initialize the noise and start
+            let noise = new Tone.Noise("white").start();
+
+            //make an autofilter to shape the noise
+            let autoFilter = new Tone.AutoFilter({
+                "frequency" : "100m",
+                "min" : 1,
+                "max" : 100
+            }).connect(Tone.Master);
+
+            //connect the noise
+            noise.connect(autoFilter);
+            //start the autofilter LFO
+            autoFilter.start();
+
+            let system;
+
+            function setup() {
+                createCanvas(innerWidth -10, innerHeight-10);
+                system = new ParticleSystem(createVector(width / 2, 50));
+            }
+
+            function draw() {
+                background(51);
+                system.addParticle();
+                system.addParticle();
+                system.addParticle();
+                system.addParticle();
+                system.addParticle();
+                system.addParticle();
+                system.run();
+            }
+
+            // A simple Particle class
+            let Particle = function(position) {
+                this.acceleration = createVector(0, 0.03);
+                this.velocity = createVector(random(-1, 1), random(-1, 0));
+                this.position = position.copy();
+                this.position.add(createVector(random(-20, 20), random(-20, 20)));
+                this.lifespan = 511;
+                this.color = 51;
+            };
+
+            Particle.prototype.run = function() {
+                this.update();
+                this.display();
+            };
+
+            // Method to update position
+            Particle.prototype.update = function(){
+                // make upward when it gets close to the bottom
+                this.velocity.add(this.acceleration);
+                this.position.add(this.velocity);
+                this.lifespan -= 1.5;
+                this.color += 0.5;
+                if(this.lifespan < 250){
+                    this.velocity.add(createVector(random(-0.1, 0.1), random(-0.2, 0.1)));
+                    this.position.add(createVector(random(-1, 1), random(-1, 0)));
+                }
+            };
+
+            // Method to display
+            Particle.prototype.display = function() {
+                stroke(0);
+                strokeWeight(0);
+                fill(this.color);
+                ellipse(this.position.x, this.position.y, 2, 2);
+            };
+
+            // Is the particle still useful?
+            Particle.prototype.isDead = function(){
+                return this.lifespan < 0;   
+            };
+
+            let ParticleSystem = function(position) {
+                this.origin = position.copy();
+                this.particles = [];
+            };
+
+            ParticleSystem.prototype.addParticle = function() {
+                this.particles.push(new Particle(this.origin));
+            };
+
+            ParticleSystem.prototype.run = function() {
+            for (let i = this.particles.length-1; i >= 0; i--) {
+                let p = this.particles[i];
+                p.run();
+                if (p.isDead()) {
+                    this.particles.splice(i, 1);
+                }
+            }
+            };
+
+        </script>
+    </body>
+</html>
