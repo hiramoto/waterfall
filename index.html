@@ -1,15 +1,35 @@
 <!DOCTYPE html>
 <html>
     <head>
-
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta charset="UTF-8">
+        <title>Waterfall</title>
+        <style>
+            body {
+              background-color: #333333;
+            }
+            
+            button {
+              background-color: #555555;
+              color: #ffffff;
+              border: none;
+              cursor: pointer;
+              padding: 10px 20px;
+              transition: background-color 0.3s;
+            }
+            
+            button:hover {
+              background-color: #777777;
+            }
+        </style>
     </head>
     
     <body>
-        <script src="https://unpkg.com/tone"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.30/Tone.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/p5@1.3.1/lib/p5.js"></script>
         <script type="text/javascript">
             //initialize the noise and start
-            let noise = new Tone.Noise("white").start();
+            let noise = new Tone.Noise("white");
 
             //make an autofilter to shape the noise
             let autoFilter = new Tone.AutoFilter({
@@ -20,13 +40,11 @@
 
             //connect the noise
             noise.connect(autoFilter);
-            //start the autofilter LFO
-            autoFilter.start();
-
+            
             let system;
 
             function setup() {
-                createCanvas(innerWidth -10, innerHeight-10);
+                createCanvas(innerWidth -25, innerHeight-60);
                 background(51);
                 system = new ParticleSystem(createVector(width / 2, 50));
             }
@@ -103,5 +121,9 @@
             };
 
         </script>
+        <div style="display:flex;justify-content: center;">
+            <button onclick="noise.start();autoFilter.start();">start</button>
+            <button onclick="autoFilter.stop();noise.stop();">pause</button>
+        </div>
     </body>
 </html>
