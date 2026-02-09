@@ -28,102 +28,194 @@
         <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.30/Tone.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/p5@1.3.1/lib/p5.js"></script>
         <script type="text/javascript">
-            //initialize the noise and start
-            let noise = new Tone.Noise("white");
-
-            //make an autofilter to shape the noise
-            let autoFilter = new Tone.AutoFilter({
-                "frequency" : "100m",
-                "min" : 1,
-                "max" : 100
+            // --- Audio: layered noise for realistic waterfall ---
+            // Main water flow: pink noise through bandpass
+            let noiseMain = new Tone.Noise("pink");
+            let filterMain = new Tone.Filter({
+                type: "bandpass",
+                frequency: 800,
+                Q: 0.5
             }).connect(Tone.Master);
+            noiseMain.connect(filterMain);
+            noiseMain.volume.value = -8;
 
-            //connect the noise
-            noise.connect(autoFilter);
-            
+            // Low rumble: brown noise through lowpass
+            let noiseLow = new Tone.Noise("brown");
+            let filterLow = new Tone.Filter({
+                type: "lowpass",
+                frequency: 200,
+                Q: 0.8
+            }).connect(Tone.Master);
+            noiseLow.connect(filterLow);
+            noiseLow.volume.value = -12;
+
+            // High splash: white noise through highpass with auto-filter for shimmer
+            let noiseHigh = new Tone.Noise("white");
+            let filterHigh = new Tone.Filter({
+                type: "highpass",
+                frequency: 3000,
+                Q: 0.3
+            });
+            let autoFilter = new Tone.AutoFilter({
+                frequency: "4n",
+                min: 2000,
+                max: 6000,
+                depth: 0.4
+            }).connect(Tone.Master);
+            noiseHigh.connect(filterHigh);
+            filterHigh.connect(autoFilter);
+            noiseHigh.volume.value = -22;
+
+            function startAudio() {
+                Tone.start();
+                noiseMain.start();
+                noiseLow.start();
+                noiseHigh.start();
+                autoFilter.start();
+            }
+            function stopAudio() {
+                noiseMain.stop();
+                noiseLow.stop();
+                noiseHigh.stop();
+                autoFilter.stop();
+            }
+
+            // --- Particle system with object pooling ---
+            const MAX_PARTICLES = 3000;
+            const PARTICLES_PER_FRAME = 15;
             let system;
+            let canvasW, canvasH;
+            let fallHeight;
 
             function setup() {
-                createCanvas(innerWidth -25, innerHeight-60);
-                background(51);
-                system = new ParticleSystem(createVector(width / 2, 50));
+                canvasW = innerWidth - 25;
+                canvasH = innerHeight - 60;
+                createCanvas(canvasW, canvasH);
+                fallHeight = canvasH * 0.75;
+                system = new ParticleSystem(createVector(width / 2, 30));
+                noStroke();
             }
 
             function draw() {
-                background(51,10);
-                system.addParticle();
-                system.addParticle();
-                system.addParticle();
-                system.addParticle();
-                system.addParticle();
-                system.addParticle();
+                background(20, 24, 36, 25);
+
+                for (let i = 0; i < PARTICLES_PER_FRAME; i++) {
+                    system.emit();
+                }
                 system.run();
             }
 
-            // A simple Particle class
-            let Particle = function(position) {
-                this.acceleration = createVector(0, 0.03);
-                this.velocity = createVector(random(-1, 1), random(-1, 0));
-                this.position = position.copy();
-                this.position.add(createVector(random(-20, 20), random(-20, 20)));
-                this.lifespan = 511;
-                this.color = 51;
+            // Particle using typed properties for performance
+            function Particle() {
+                this.px = 0; this.py = 0;
+                this.vx = 0; this.vy = 0;
+                this.life = 0;
+                this.maxLife = 0;
+                this.size = 1;
+                this.type = 0; // 0=stream, 1=mist
+                this.alive = false;
+            }
+
+            Particle.prototype.init = function(ox, oy, type) {
+                this.type = type;
+                this.alive = true;
+                if (type === 0) {
+                    // Main stream particle
+                    this.px = ox + random(-30, 30);
+                    this.py = oy + random(-5, 5);
+                    this.vx = random(-0.5, 0.5);
+                    this.vy = random(1, 3);
+                    this.maxLife = random(180, 340);
+                    this.size = random(1.5, 3);
+                } else {
+                    // Mist / splash particle
+                    this.px = ox + random(-60, 60);
+                    this.py = fallHeight + random(-20, 30);
+                    this.vx = random(-2, 2);
+                    this.vy = random(-2, 0.5);
+                    this.maxLife = random(40, 100);
+                    this.size = random(2, 5);
+                }
+                this.life = this.maxLife;
             };
 
-            Particle.prototype.run = function() {
-                this.update();
-                this.display();
+            Particle.prototype.update = function() {
+                if (!this.alive) return;
+                if (this.type === 0) {
+                    // Gravity + slight horizontal drift
+                    this.vy += 0.08;
+                    this.vx += random(-0.02, 0.02);
+                    // Splash when hitting bottom
+                    if (this.py > fallHeight) {
+                        this.life -= 8;
+                        this.vx *= 1.05;
+                        this.vy *= -0.2;
+                    }
+                } else {
+                    // Mist rises and drifts
+                    this.vy -= 0.01;
+                    this.vx += random(-0.05, 0.05);
+                }
+                this.px += this.vx;
+                this.py += this.vy;
+                this.life -= 1;
+                if (this.life <= 0) this.alive = false;
             };
 
-            // Method to update position
-            Particle.prototype.update = function(){
-                // make upward when it gets close to the bottom
-                this.velocity.add(this.acceleration);
-                this.position.add(this.velocity);
-                this.lifespan -= 1.5;
-                this.color += 0.5;
-                if(this.lifespan < 250){
-                    this.velocity.add(createVector(random(-0.1, 0.1), random(-0.17, 0.1)));
-                    this.position.add(createVector(random(-1, 1), random(-1, 0)));
+            Particle.prototype.display = function() {
+                if (!this.alive) return;
+                let t = this.life / this.maxLife;
+                if (this.type === 0) {
+                    // Stream: white-blue water
+                    let alpha = t * 180;
+                    let b = 200 + (1 - t) * 55;
+                    fill(180, 210, b, alpha);
+                    rect(this.px, this.py, this.size, this.size * 1.5);
+                } else {
+                    // Mist: faint white cloud
+                    let alpha = t * 60;
+                    fill(220, 230, 255, alpha);
+                    ellipse(this.px, this.py, this.size, this.size);
                 }
             };
 
-            // Method to display
-            Particle.prototype.display = function() {
-                stroke(0);
-                strokeWeight(0);
-                fill(this.color);
-                ellipse(this.position.x, this.position.y, 2, 2);
-            };
+            // Particle system with pool
+            function ParticleSystem(position) {
+                this.ox = position.x;
+                this.oy = position.y;
+                this.pool = new Array(MAX_PARTICLES);
+                this.count = 0;
+                for (let i = 0; i < MAX_PARTICLES; i++) {
+                    this.pool[i] = new Particle();
+                }
+            }
 
-            // Is the particle still useful?
-            Particle.prototype.isDead = function(){
-                return this.lifespan < 0;   
-            };
-
-            let ParticleSystem = function(position) {
-                this.origin = position.copy();
-                this.particles = [];
-            };
-
-            ParticleSystem.prototype.addParticle = function() {
-                this.particles.push(new Particle(this.origin));
+            ParticleSystem.prototype.emit = function() {
+                // Find a dead particle in pool to reuse
+                for (let i = 0; i < MAX_PARTICLES; i++) {
+                    if (!this.pool[i].alive) {
+                        // 85% stream, 15% mist
+                        let type = random() < 0.85 ? 0 : 1;
+                        this.pool[i].init(this.ox, this.oy, type);
+                        return;
+                    }
+                }
             };
 
             ParticleSystem.prototype.run = function() {
-            for (let i = this.particles.length-1; i >= 0; i--) {
-                let p = this.particles[i];
-                p.run();
-                if (p.isDead()) {
-                    this.particles.splice(i, 1);
+                for (let i = 0; i < MAX_PARTICLES; i++) {
+                    let p = this.pool[i];
+                    if (p.alive) {
+                        p.update();
+                        p.display();
+                    }
                 }
-            }
             };
 
         </script>
         <div style="display:flex;justify-content: center;">
-            <button onclick="noise.start();autoFilter.start();">start</button>
-            <button onclick="autoFilter.stop();noise.stop();">pause</button>
+            <button onclick="startAudio();">start</button>
+            <button onclick="stopAudio();">pause</button>
         </div>
     </body>
 </html>
